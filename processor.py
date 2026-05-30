@@ -717,7 +717,6 @@ def build_html_body(
     </div>
 </body>
 </html>"""
-    </html>"""    # ← This is the correct final return
 
 
 # ============================================================
