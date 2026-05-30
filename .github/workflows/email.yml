@@ -10,11 +10,6 @@ on:
   schedule:
     - cron: '30 1 * * *'    # 1:30 AM UTC = 7:00 AM IST
   workflow_dispatch:         # Manual trigger
-    inputs:
-      run_id:
-        description: 'Run ID from download workflow'
-        required: false
-        default: ''
 
 jobs:
   email:
@@ -42,7 +37,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      # ── 4. Install dependencies ────────────────────────────
+      # ── 4. Install Python dependencies ─────────────────────
       - name: Install Python Dependencies
         run: pip install -r requirements.txt
 
@@ -52,26 +47,38 @@ jobs:
           mkdir -p /tmp/booking_downloads
           mkdir -p /tmp/booking_reports
 
-      # ── 6. Download artifact from download workflow ────────
-      - name: Download Booking Data Artifact
+      # ── 6. Download latest artifact ────────────────────────
+      - name: Download Latest Booking Data Artifact
         uses: actions/download-artifact@v4
         with:
-          name: booking-data-${{ github.event.inputs.run_id || github.run_id }}
-          path: /tmp/
+          name: booking-data-latest
+          path: /tmp/artifact/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
 
       # ── 7. Restore file structure ──────────────────────────
       - name: Restore Downloaded Files
         run: |
-          # Move files back to correct locations
-          if [ -d "/tmp/booking_downloads" ]; then
-            echo "✅ Booking downloads directory found"
+          echo "📂 Artifact contents:"
+          ls -la /tmp/artifact/
+
+          # Restore booking downloads folder
+          if [ -d "/tmp/artifact/booking_downloads" ]; then
+            cp -r /tmp/artifact/booking_downloads/. /tmp/booking_downloads/
+            echo "✅ Booking files restored:"
             ls -la /tmp/booking_downloads/
+          else
+            echo "❌ booking_downloads folder not found in artifact"
+            exit 1
           fi
-          if [ -f "/tmp/handoff.json" ]; then
-            echo "✅ Handoff file found"
+
+          # Restore handoff.json
+          if [ -f "/tmp/artifact/handoff.json" ]; then
+            cp /tmp/artifact/handoff.json /tmp/handoff.json
+            echo "✅ Handoff file restored:"
             cat /tmp/handoff.json
           else
-            echo "❌ Handoff file missing"
+            echo "❌ handoff.json not found in artifact"
             exit 1
           fi
 
