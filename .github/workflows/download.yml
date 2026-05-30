@@ -1,0 +1,92 @@
+# ============================================================
+# WORKFLOW 1 — DOWNLOAD BOOKING DATA
+# .github/workflows/download.yml
+# Runs at 3:00 AM IST = 21:30 UTC (previous day)
+# ============================================================
+
+name: Download Booking Data
+
+on:
+  schedule:
+    - cron: '30 21 * * *'   # 9:30 PM UTC = 3:00 AM IST
+  workflow_dispatch:         # Manual trigger from GitHub UI
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+
+      # ── 1. Checkout code ───────────────────────────────────
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Python ────────────────────────────────────
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ── 3. Cache pip packages ──────────────────────────────
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # ── 4. Install dependencies ────────────────────────────
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
+
+      # ── 5. Install Playwright browsers ────────────────────
+      - name: Install Playwright Chromium
+        run: playwright install chromium --with-deps
+
+      # ── 6. Create temp directories ─────────────────────────
+      - name: Create Working Directories
+        run: |
+          mkdir -p /tmp/booking_downloads
+          mkdir -p /tmp/booking_reports
+
+      # ── 7. Run downloader ──────────────────────────────────
+      - name: Run Download Step
+        env:
+          WISX_USER_ID:       ${{ secrets.WISX_USER_ID }}
+          WISX_PASSWORD:      ${{ secrets.WISX_PASSWORD }}
+          SMTP_SENDER_EMAIL:  ${{ secrets.SMTP_SENDER_EMAIL }}
+          SMTP_SENDER_PASSWORD: ${{ secrets.SMTP_SENDER_PASSWORD }}
+          EMAIL_LINKEDIN_TO:  ${{ secrets.EMAIL_LINKEDIN_TO }}
+          EMAIL_LINKEDIN_CC:  ${{ secrets.EMAIL_LINKEDIN_CC }}
+          EMAIL_BTC_TO:       ${{ secrets.EMAIL_BTC_TO }}
+          EMAIL_BTC_CC:       ${{ secrets.EMAIL_BTC_CC }}
+          EMAIL_NONBTC_TO:    ${{ secrets.EMAIL_NONBTC_TO }}
+          EMAIL_NONBTC_CC:    ${{ secrets.EMAIL_NONBTC_CC }}
+        run: python download_master.py
+
+      # ── 8. Upload downloaded file as artifact ──────────────
+      - name: Upload Downloaded File
+        uses: actions/upload-artifact@v4
+        with:
+          name: booking-data-${{ github.run_id }}
+          path: |
+            /tmp/booking_downloads/
+            /tmp/handoff.json
+          retention-days: 1
+
+      # ── 9. Trigger email workflow ──────────────────────────
+      - name: Trigger Email Workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner:   context.repo.owner,
+              repo:    context.repo.repo,
+              workflow_id: 'email.yml',
+              ref:     'main',
+              inputs: {
+                run_id: '${{ github.run_id }}'
+              }
+            })
