@@ -990,7 +990,8 @@ def run_processor(
             return False
 
         folders      = setup_folder_structure(run_date, config)
-        store_path   = folders["month"] / config["PATHS"]["store_file_name"]
+        store_folder = Path(config["PATHS"]["root_output_folder"].strip())
+        store_path   = store_folder / get_month_folder_name(run_date) / config["PATHS"]["store_file_name"]
         report_label = get_report_label(run_date, logger)
 
         manage_download_folders(input_file, folders, logger)
