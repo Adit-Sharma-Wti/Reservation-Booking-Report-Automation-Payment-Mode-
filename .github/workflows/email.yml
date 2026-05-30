@@ -1,0 +1,91 @@
+# ============================================================
+# WORKFLOW 2 — PROCESS DATA & SEND EMAILS
+# .github/workflows/email.yml
+# Runs at 7:00 AM IST = 01:30 AM UTC
+# ============================================================
+
+name: Process and Send Email Reports
+
+on:
+  schedule:
+    - cron: '30 1 * * *'    # 1:30 AM UTC = 7:00 AM IST
+  workflow_dispatch:         # Manual trigger
+    inputs:
+      run_id:
+        description: 'Run ID from download workflow'
+        required: false
+        default: ''
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+
+      # ── 1. Checkout code ───────────────────────────────────
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Python ────────────────────────────────────
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ── 3. Cache pip packages ──────────────────────────────
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # ── 4. Install dependencies ────────────────────────────
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
+
+      # ── 5. Create temp directories ─────────────────────────
+      - name: Create Working Directories
+        run: |
+          mkdir -p /tmp/booking_downloads
+          mkdir -p /tmp/booking_reports
+
+      # ── 6. Download artifact from download workflow ────────
+      - name: Download Booking Data Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: booking-data-${{ github.event.inputs.run_id || github.run_id }}
+          path: /tmp/
+
+      # ── 7. Restore file structure ──────────────────────────
+      - name: Restore Downloaded Files
+        run: |
+          # Move files back to correct locations
+          if [ -d "/tmp/booking_downloads" ]; then
+            echo "✅ Booking downloads directory found"
+            ls -la /tmp/booking_downloads/
+          fi
+          if [ -f "/tmp/handoff.json" ]; then
+            echo "✅ Handoff file found"
+            cat /tmp/handoff.json
+          else
+            echo "❌ Handoff file missing"
+            exit 1
+          fi
+
+      # ── 8. Run processor + emailer ─────────────────────────
+      - name: Run Process and Email Step
+        env:
+          WISX_USER_ID:         ${{ secrets.WISX_USER_ID }}
+          WISX_PASSWORD:        ${{ secrets.WISX_PASSWORD }}
+          SMTP_SENDER_EMAIL:    ${{ secrets.SMTP_SENDER_EMAIL }}
+          SMTP_SENDER_PASSWORD: ${{ secrets.SMTP_SENDER_PASSWORD }}
+          EMAIL_LINKEDIN_TO:    ${{ secrets.EMAIL_LINKEDIN_TO }}
+          EMAIL_LINKEDIN_CC:    ${{ secrets.EMAIL_LINKEDIN_CC }}
+          EMAIL_BTC_TO:         ${{ secrets.EMAIL_BTC_TO }}
+          EMAIL_BTC_CC:         ${{ secrets.EMAIL_BTC_CC }}
+          EMAIL_NONBTC_TO:      ${{ secrets.EMAIL_NONBTC_TO }}
+          EMAIL_NONBTC_CC:      ${{ secrets.EMAIL_NONBTC_CC }}
+        run: python email_master.py
