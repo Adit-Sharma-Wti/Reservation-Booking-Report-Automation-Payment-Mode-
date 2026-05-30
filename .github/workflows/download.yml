@@ -1,15 +1,14 @@
 # ============================================================
 # WORKFLOW 1 — DOWNLOAD BOOKING DATA
 # .github/workflows/download.yml
-# Runs at 3:00 AM IST = 21:30 UTC (previous day)
 # ============================================================
 
 name: Download Booking Data
 
 on:
   schedule:
-    - cron: '30 21 * * *'   # 9:30 PM UTC = 3:00 AM IST
-  workflow_dispatch:         # Manual trigger from GitHub UI
+    - cron: '30 21 * * *'
+  workflow_dispatch:
 
 jobs:
   download:
@@ -18,17 +17,17 @@ jobs:
 
     steps:
 
-      # ── 1. Checkout code ───────────────────────────────────
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      # ── 2. Setup Python ────────────────────────────────────
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # ── 3. Cache pip packages ──────────────────────────────
       - name: Cache pip packages
         uses: actions/cache@v4
         with:
@@ -37,11 +36,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      # ── 4. Install Python dependencies ─────────────────────
       - name: Install Python Dependencies
         run: pip install -r requirements.txt
 
-      # ── 5. Install system deps + Playwright Chromium ───────
       - name: Install Playwright Chromium
         run: |
           sudo apt-get update
@@ -62,13 +59,11 @@ jobs:
             libcairo2
           playwright install chromium
 
-      # ── 6. Create temp directories ─────────────────────────
       - name: Create Working Directories
         run: |
           mkdir -p /tmp/booking_downloads
-          mkdir -p /tmp/booking_reports
+          mkdir -p store
 
-      # ── 7. Run downloader ──────────────────────────────────
       - name: Run Download Step
         env:
           WISX_USER_ID:         ${{ secrets.WISX_USER_ID }}
@@ -83,8 +78,7 @@ jobs:
           EMAIL_NONBTC_CC:      ${{ secrets.EMAIL_NONBTC_CC }}
         run: python download_master.py
 
-      # ── 8. Upload downloaded file as artifact ──────────────
-      - name: Upload Downloaded File
+      - name: Upload Downloaded File as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: booking-data-latest
@@ -93,5 +87,3 @@ jobs:
             /tmp/handoff.json
           retention-days: 1
           overwrite: true
-          
-        
