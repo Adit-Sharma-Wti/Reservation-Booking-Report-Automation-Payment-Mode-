@@ -47,16 +47,49 @@ jobs:
           mkdir -p /tmp/booking_downloads
           mkdir -p /tmp/booking_reports
 
-      # ── 6. Download latest artifact ────────────────────────
-      - name: Download Latest Booking Data Artifact
+      # ── 6. Find latest download workflow run ID ────────────
+      - name: Find Latest Download Run ID
+        id: find_run
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Get list of runs for the download workflow
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner:         context.repo.owner,
+              repo:          context.repo.repo,
+              workflow_id:   'download.yml',
+              status:        'success',
+              per_page:      5,
+            });
+
+            if (runs.data.workflow_runs.length === 0) {
+              core.setFailed(
+                '❌ No successful download workflow runs found. ' +
+                'Please run the Download workflow first.'
+              );
+              return;
+            }
+
+            // Pick the most recent successful run
+            const latestRun = runs.data.workflow_runs[0];
+            console.log(`✅ Found download run ID: ${latestRun.id}`);
+            console.log(`   Run name   : ${latestRun.name}`);
+            console.log(`   Created at : ${latestRun.created_at}`);
+            console.log(`   Status     : ${latestRun.status}`);
+
+            core.setOutput('run_id', latestRun.id.toString());
+
+      # ── 7. Download artifact from download workflow ────────
+      - name: Download Booking Data Artifact
         uses: actions/download-artifact@v4
         with:
-          name: booking-data-latest
-          path: /tmp/artifact/
+          name:         booking-data-latest
+          path:         /tmp/artifact/
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
+          repository:   ${{ github.repository }}
+          run-id:       ${{ steps.find_run.outputs.run_id }}
 
-      # ── 7. Restore file structure ──────────────────────────
+      # ── 8. Restore file structure ──────────────────────────
       - name: Restore Downloaded Files
         run: |
           echo "📂 Artifact contents:"
@@ -69,6 +102,8 @@ jobs:
             ls -la /tmp/booking_downloads/
           else
             echo "❌ booking_downloads folder not found in artifact"
+            echo "Available folders:"
+            find /tmp/artifact/ -type f
             exit 1
           fi
 
@@ -79,10 +114,12 @@ jobs:
             cat /tmp/handoff.json
           else
             echo "❌ handoff.json not found in artifact"
+            echo "Available files:"
+            find /tmp/artifact/ -type f
             exit 1
           fi
 
-      # ── 8. Run processor + emailer ─────────────────────────
+      # ── 9. Run processor + emailer ─────────────────────────
       - name: Run Process and Email Step
         env:
           WISX_USER_ID:         ${{ secrets.WISX_USER_ID }}
@@ -96,3 +133,4 @@ jobs:
           EMAIL_NONBTC_TO:      ${{ secrets.EMAIL_NONBTC_TO }}
           EMAIL_NONBTC_CC:      ${{ secrets.EMAIL_NONBTC_CC }}
         run: python email_master.py
+
