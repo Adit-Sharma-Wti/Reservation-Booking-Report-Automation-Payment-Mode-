@@ -717,7 +717,7 @@ def build_html_body(
     </div>
 </body>
 </html>"""
-    return html
+    </html>"""    # ← This is the correct final return
 
 
 # ============================================================
@@ -725,9 +725,17 @@ def build_html_body(
 # ============================================================
 
 def parse_recipients(raw: str) -> list:
+    """
+    Parses comma separated email addresses.
+    Filters out empty values and GitHub masked values (***)
+    """
     if not raw or not raw.strip():
         return []
-    return [e.strip() for e in raw.split(",") if e.strip()]
+    return [
+        e.strip()
+        for e in raw.split(",")
+        if e.strip() and "***" not in e and "@" in e
+    ]
 
 
 def build_email_message(
@@ -744,8 +752,16 @@ def build_email_message(
     msg["From"]    = f"{sender_name} <{sender_email}>"
     msg["To"]      = ", ".join(to_list)
     msg["Subject"] = subject
-    if cc_list:
-        msg["Cc"]  = ", ".join(cc_list)
+
+    # Only add Cc header if cc_list is non-empty
+    # and contains valid email addresses
+    # (guards against GitHub secret masking ***)
+    clean_cc = [
+        e for e in cc_list
+        if e and "***" not in e and "@" in e
+    ]
+    if clean_cc:
+        msg["Cc"] = ", ".join(clean_cc)
 
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
@@ -759,7 +775,6 @@ def build_email_message(
     )
     msg.attach(part)
     return msg
-
 
 def send_email(
     msg: MIMEMultipart,
@@ -777,7 +792,12 @@ def send_email(
     sender_pass  = config["SMTP"]["sender_password"].strip()
     max_retries  = int(config["EMAIL_SETTINGS"]["retry_attempts"].strip())
     retry_delay  = int(config["EMAIL_SETTINGS"]["retry_delay_sec"].strip())
-    all_recv     = to_list + cc_list + bcc_list
+        # Filter out any masked GitHub secret values (***)
+    # from all recipient lists before sending
+    all_recv = [
+        e for e in (to_list + cc_list + bcc_list)
+        if e and "***" not in e and "@" in e
+    ]
 
     for attempt in range(1, max_retries + 1):
         try:
