@@ -37,13 +37,30 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      # ── 4. Install dependencies ────────────────────────────
+      # ── 4. Install Python dependencies ─────────────────────
       - name: Install Python Dependencies
         run: pip install -r requirements.txt
 
-      # ── 5. Install Playwright browsers ────────────────────
+      # ── 5. Install system deps + Playwright Chromium ───────
       - name: Install Playwright Chromium
-        run: playwright install chromium --with-deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2t64 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libgbm1 \
+            libnss3 \
+            libpango-1.0-0 \
+            libcairo2
+          playwright install chromium
 
       # ── 6. Create temp directories ─────────────────────────
       - name: Create Working Directories
@@ -54,16 +71,16 @@ jobs:
       # ── 7. Run downloader ──────────────────────────────────
       - name: Run Download Step
         env:
-          WISX_USER_ID:       ${{ secrets.WISX_USER_ID }}
-          WISX_PASSWORD:      ${{ secrets.WISX_PASSWORD }}
-          SMTP_SENDER_EMAIL:  ${{ secrets.SMTP_SENDER_EMAIL }}
+          WISX_USER_ID:         ${{ secrets.WISX_USER_ID }}
+          WISX_PASSWORD:        ${{ secrets.WISX_PASSWORD }}
+          SMTP_SENDER_EMAIL:    ${{ secrets.SMTP_SENDER_EMAIL }}
           SMTP_SENDER_PASSWORD: ${{ secrets.SMTP_SENDER_PASSWORD }}
-          EMAIL_LINKEDIN_TO:  ${{ secrets.EMAIL_LINKEDIN_TO }}
-          EMAIL_LINKEDIN_CC:  ${{ secrets.EMAIL_LINKEDIN_CC }}
-          EMAIL_BTC_TO:       ${{ secrets.EMAIL_BTC_TO }}
-          EMAIL_BTC_CC:       ${{ secrets.EMAIL_BTC_CC }}
-          EMAIL_NONBTC_TO:    ${{ secrets.EMAIL_NONBTC_TO }}
-          EMAIL_NONBTC_CC:    ${{ secrets.EMAIL_NONBTC_CC }}
+          EMAIL_LINKEDIN_TO:    ${{ secrets.EMAIL_LINKEDIN_TO }}
+          EMAIL_LINKEDIN_CC:    ${{ secrets.EMAIL_LINKEDIN_CC }}
+          EMAIL_BTC_TO:         ${{ secrets.EMAIL_BTC_TO }}
+          EMAIL_BTC_CC:         ${{ secrets.EMAIL_BTC_CC }}
+          EMAIL_NONBTC_TO:      ${{ secrets.EMAIL_NONBTC_TO }}
+          EMAIL_NONBTC_CC:      ${{ secrets.EMAIL_NONBTC_CC }}
         run: python download_master.py
 
       # ── 8. Upload downloaded file as artifact ──────────────
