@@ -522,26 +522,48 @@ def write_output_files(
 # ============================================================
 
 def update_store(
-    df: pd.DataFrame, # New Bookings Value
-    store_path: Path, # File Path where Processed Booking No Stored
-    processed_df: pd.DataFrame, # Processed - Inital Dump Dataframe
+    df: pd.DataFrame,
+    store_path: Path,
+    processed_df: pd.DataFrame,
     logger: logging.Logger,
 ) -> None:
-    new_nos = pd.DataFrame({"BookingNo": df["BookingNo_clean"]})
-    new_nos = new_nos[new_nos["BookingNo"] != ""].drop_duplicates()
 
-    # Keep only BookingNo column from processed_df
-    processed_nos = (
-        processed_df.loc[processed_df["BookingNo"] != "", ["BookingNo"]]
-        .drop_duplicates()
+    # New booking numbers from current run
+    new_nos = pd.DataFrame(
+        {"BookingNo": df["BookingNo_clean"]}
     )
-    processed_nos.to_csv(store_path, index=False)
+    new_nos = new_nos[
+        new_nos["BookingNo"] != ""
+    ].drop_duplicates()
+
+    # Load existing stored booking numbers
+    if store_path.exists():
+        existing = pd.read_csv(store_path, dtype=str)
+        existing["BookingNo"] = (
+            existing["BookingNo"]
+            .fillna("").astype(str).str.strip()
+        )
+    else:
+        existing = pd.DataFrame({"BookingNo": []})
+
+    # Combine old + new → deduplicate
+    combined = pd.concat(
+        [existing[["BookingNo"]], new_nos],
+        ignore_index=True
+    )
+    combined = (
+        combined[combined["BookingNo"] != ""]
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+    combined.to_csv(store_path, index=False)
 
     logger.info(
-        f"[PROCESSOR] Store updated: +{len(new_nos)} new | "
-        f"Total: {len(processed_nos)}"
+        f"[PROCESSOR] Store updated : +{len(new_nos)} new"
     )
-
+    logger.info(
+        f"[PROCESSOR] Total stored  : {len(combined)} bookings"
+    )
 
 # ============================================================
 # HTML EMAIL BUILDER
