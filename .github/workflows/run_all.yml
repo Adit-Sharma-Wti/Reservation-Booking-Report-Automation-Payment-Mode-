@@ -1,0 +1,214 @@
+# ============================================================
+# COMBINED WORKFLOW — Download + Process + Email
+# .github/workflows/run_all.yml
+# One click runs everything end to end
+# ============================================================
+
+name: 🚀 Run Full Report (Download + Email)
+
+on:
+  workflow_dispatch:    # Manual trigger ONLY
+    inputs:
+      reason:
+        description: 'Reason for manual run (optional)'
+        required: false
+        default: 'Daily manual run'
+
+jobs:
+
+  # ── JOB 1: DOWNLOAD ───────────────────────────────────────
+  download:
+    name: 📥 Step 1 — Download Booking Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright + System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2t64 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libgbm1 \
+            libnss3 \
+            libpango-1.0-0 \
+            libcairo2
+          playwright install chromium
+
+      - name: Create Working Directories
+        run: |
+          mkdir -p /tmp/booking_downloads
+          mkdir -p store
+
+      - name: Run Download Step
+        env:
+          WISX_USER_ID:         ${{ secrets.WISX_USER_ID }}
+          WISX_PASSWORD:        ${{ secrets.WISX_PASSWORD }}
+          SMTP_SENDER_EMAIL:    ${{ secrets.SMTP_SENDER_EMAIL }}
+          SMTP_SENDER_PASSWORD: ${{ secrets.SMTP_SENDER_PASSWORD }}
+          EMAIL_LINKEDIN_TO:    ${{ secrets.EMAIL_LINKEDIN_TO }}
+          EMAIL_LINKEDIN_CC:    ${{ secrets.EMAIL_LINKEDIN_CC }}
+          EMAIL_BTC_TO:         ${{ secrets.EMAIL_BTC_TO }}
+          EMAIL_BTC_CC:         ${{ secrets.EMAIL_BTC_CC }}
+          EMAIL_NONBTC_TO:      ${{ secrets.EMAIL_NONBTC_TO }}
+          EMAIL_NONBTC_CC:      ${{ secrets.EMAIL_NONBTC_CC }}
+        run: python download_master.py
+
+      - name: Upload Downloaded Files as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: booking-data-latest
+          path: |
+            /tmp/booking_downloads/
+            /tmp/handoff.json
+          retention-days: 1
+          overwrite: true
+
+  # ── JOB 2: EMAIL (runs after download succeeds) ───────────
+  email:
+    name: 📧 Step 2 — Process + Send Emails
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: download         # ← Waits for download to finish
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create Working Directories
+        run: |
+          mkdir -p /tmp/booking_downloads
+          mkdir -p store
+
+      - name: Download Artifact from Download Job
+        uses: actions/download-artifact@v4
+        with:
+          name: booking-data-latest
+          path: /tmp/artifact/
+
+      - name: Restore Downloaded Files
+        run: |
+          echo "📂 Artifact contents:"
+          ls -la /tmp/artifact/
+
+          if [ -d "/tmp/artifact/booking_downloads" ]; then
+            cp -r /tmp/artifact/booking_downloads/. \
+              /tmp/booking_downloads/
+            echo "✅ Booking files restored"
+            ls -la /tmp/booking_downloads/
+          else
+            echo "❌ booking_downloads folder not found"
+            find /tmp/artifact/ -type f
+            exit 1
+          fi
+
+          if [ -f "/tmp/artifact/handoff.json" ]; then
+            cp /tmp/artifact/handoff.json /tmp/handoff.json
+            echo "✅ Handoff restored:"
+            cat /tmp/handoff.json
+          else
+            echo "❌ handoff.json not found"
+            exit 1
+          fi
+
+      - name: Show Current Store Structure
+        run: |
+          echo "📂 Current store folder:"
+          find store/ -type f 2>/dev/null || echo "Store is empty"
+
+      - name: Run Process and Email Step
+        env:
+          WISX_USER_ID:         ${{ secrets.WISX_USER_ID }}
+          WISX_PASSWORD:        ${{ secrets.WISX_PASSWORD }}
+          SMTP_SENDER_EMAIL:    ${{ secrets.SMTP_SENDER_EMAIL }}
+          SMTP_SENDER_PASSWORD: ${{ secrets.SMTP_SENDER_PASSWORD }}
+          EMAIL_LINKEDIN_TO:    ${{ secrets.EMAIL_LINKEDIN_TO }}
+          EMAIL_LINKEDIN_CC:    ${{ secrets.EMAIL_LINKEDIN_CC }}
+          EMAIL_BTC_TO:         ${{ secrets.EMAIL_BTC_TO }}
+          EMAIL_BTC_CC:         ${{ secrets.EMAIL_BTC_CC }}
+          EMAIL_NONBTC_TO:      ${{ secrets.EMAIL_NONBTC_TO }}
+          EMAIL_NONBTC_CC:      ${{ secrets.EMAIL_NONBTC_CC }}
+        run: python email_master.py
+
+      - name: Show Updated Store Structure
+        run: |
+          echo "📂 Updated store folder:"
+          find store/ -type f 2>/dev/null
+          echo ""
+          echo "📊 Processed Booking Numbers:"
+          find store/ -name "Processed_Booking_Numbers.csv" \
+          | while read f; do
+            echo "$f → $(wc -l < $f) bookings"
+          done
+
+      - name: Commit Store and Reports Back to Repo
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email \
+            "github-actions[bot]@users.noreply.github.com"
+          git add store/
+          if git diff --staged --quiet; then
+            echo "✅ No changes to commit"
+          else
+            git commit -m \
+              "🔄 Daily Update - $(date +'%d-%b-%Y %H:%M') IST"
+            git push
+            echo "✅ Pushed to repo"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
