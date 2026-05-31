@@ -42,12 +42,9 @@ def main():
     logger.info(f"  Run Date : {run_date.strftime('%d-%b-%Y %H:%M:%S')}")
     logger.info("=" * 70)
 
-    # Load config with secrets injected
     config = load_config("config.ini")
 
-    # Read handoff file from download step
     handoff_path = Path("/tmp/handoff.json")
-
     if not handoff_path.exists():
         logger.error(
             "❌ Handoff file not found. "
@@ -58,24 +55,48 @@ def main():
     with open(handoff_path, "r") as f:
         handoff = json.load(f)
 
-    file_path = handoff["file_path"]
-    logger.info(f"📂 Processing file: {Path(file_path).name}")
+    # Support both old (file_path) and new (file_paths) format
+    if "file_paths" in handoff:
+        file_paths = handoff["file_paths"]
+    elif "file_path" in handoff:
+        file_paths = [handoff["file_path"]]
+    else:
+        logger.error("❌ No file path found in handoff.json")
+        sys.exit(1)
+
+    logger.info(f"📂 Files to process : {len(file_paths)}")
     logger.info(
-        f"📅 Originally downloaded at: {handoff['run_date']}"
+        f"📅 Downloaded at    : {handoff['run_date']}"
     )
 
-    # Ensure output directories exist
     output_dir = config["PATHS"]["root_output_folder"]
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    # Run processor + emailer
-    success = run_processor(config, logger, file_path)
+    # Process each file sequentially
+    # On 1st of month: prev month file first, then current
+    for idx, file_path in enumerate(file_paths, start=1):
+        logger.info("=" * 70)
+        logger.info(
+            f"  Processing file {idx}/{len(file_paths)}: "
+            f"{Path(file_path).name}"
+        )
+        logger.info("=" * 70)
 
-    if not success:
-        logger.error("❌ Processing or Email step FAILED.")
-        sys.exit(1)
+        success = run_processor(config, logger, file_path)
 
-    logger.info("✅ Processing and Email complete.")
+        if not success:
+            logger.error(
+                f"❌ Processing FAILED for: "
+                f"{Path(file_path).name}"
+            )
+            sys.exit(1)
+
+        logger.info(
+            f"✅ File {idx}/{len(file_paths)} complete."
+        )
+
+    logger.info("=" * 70)
+    logger.info("✅ All files processed and emails sent.")
     logger.info("=" * 70)
 
 
