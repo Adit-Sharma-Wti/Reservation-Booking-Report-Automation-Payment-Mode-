@@ -1,36 +1,38 @@
 # ============================================================
 # WORKFLOW 2 — PROCESS DATA & SEND EMAILS
 # .github/workflows/email.yml
+# Runs at 7:00 AM IST = 01:30 AM UTC
 # ============================================================
 
 name: Process and Send Email Reports
 
 on:
   schedule:
-    - cron: '30 1 * * *'
-  workflow_dispatch:
+    - cron: '30 1 * * *'    # 7:00 AM IST
+  workflow_dispatch:         # Manual trigger
 
 jobs:
   email:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
 
-      # ── 1. Checkout with write permission ─────────────────
       - name: Checkout Repository
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Setup Python 3.11
-        uses: actions/setup-python@v5.6.0
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Cache pip packages
-        uses: actions/cache@v4.2.3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
@@ -47,7 +49,7 @@ jobs:
 
       - name: Find Latest Download Run ID
         id: find_run
-        uses: actions/github-script@v7.0.1
+        uses: actions/github-script@v7
         with:
           script: |
             const runs = await github.rest.actions.listWorkflowRuns({
@@ -57,16 +59,42 @@ jobs:
               status:      'success',
               per_page:    5,
             });
+
             if (runs.data.workflow_runs.length === 0) {
               core.setFailed('❌ No successful download runs found.');
               return;
             }
+
             const latestRun = runs.data.workflow_runs[0];
-            console.log(`✅ Found run ID: ${latestRun.id}`);
-            core.setOutput('run_id', latestRun.id.toString());
+
+            // ── Check if download ran TODAY ──────────────────
+            const runDate    = new Date(latestRun.created_at);
+            const today      = new Date();
+            const isSameDay  = (
+              runDate.getUTCFullYear() === today.getUTCFullYear() &&
+              runDate.getUTCMonth()    === today.getUTCMonth()    &&
+              runDate.getUTCDate()     === today.getUTCDate()
+            );
+
+            console.log(`✅ Latest download run ID : ${latestRun.id}`);
+            console.log(`   Created at             : ${latestRun.created_at}`);
+            console.log(`   Ran today              : ${isSameDay}`);
+
+            if (!isSameDay) {
+              console.log(
+                '⚠️  WARNING: Latest download run is NOT from today.'
+              );
+              console.log(
+                '   Using most recent successful run anyway...'
+              );
+            }
+
+            core.setOutput('run_id',    latestRun.id.toString());
+            core.setOutput('same_day',  isSameDay.toString());
+            core.setOutput('run_date',  latestRun.created_at);
 
       - name: Download Booking Data Artifact
-        uses: actions/download-artifact@v4.3.0
+        uses: actions/download-artifact@v4
         with:
           name:         booking-data-latest
           path:         /tmp/artifact/
@@ -98,7 +126,6 @@ jobs:
             exit 1
           fi
 
-      # ── Show current store structure ───────────────────────
       - name: Show Current Store Structure
         run: |
           echo "📂 Current store folder:"
@@ -118,34 +145,28 @@ jobs:
           EMAIL_NONBTC_CC:      ${{ secrets.EMAIL_NONBTC_CC }}
         run: python email_master.py
 
-      # ── Show what was created ──────────────────────────────
       - name: Show Updated Store Structure
         run: |
           echo "📂 Updated store folder:"
           find store/ -type f 2>/dev/null
           echo ""
           echo "📊 Processed Booking Numbers Count:"
-          find store/ -name "Processed_Booking_Numbers.csv" | while read f; do
+          find store/ -name "Processed_Booking_Numbers.csv" \
+          | while read f; do
             echo "$f → $(wc -l < $f) bookings"
           done
 
-      # ── Commit everything back to repo ────────────────────
-      - name: Commit Store & Reports Back to Repo
+      - name: Commit Store and Reports Back to Repo
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Stage all store files
           git add store/
-
-          # Check if anything changed
           if git diff --staged --quiet; then
             echo "✅ No changes to commit"
           else
-            echo "📝 Changes detected — committing..."
             git commit -m "🔄 Daily Update - $(date +'%d-%b-%Y %H:%M') IST"
             git push
-            echo "✅ Store committed and pushed to repo"
+            echo "✅ Pushed to repo"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
