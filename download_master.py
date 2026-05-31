@@ -42,36 +42,44 @@ def main():
     logger.info(f"  Run Date : {run_date.strftime('%d-%b-%Y %H:%M:%S')}")
     logger.info("=" * 70)
 
-    # Load config with secrets injected
     config = load_config("config.ini")
 
-    # Ensure download directory exists
     download_dir = config["PATHS"]["downloads_source_folder"]
     Path(download_dir).mkdir(parents=True, exist_ok=True)
 
-    # Run downloader
-    success, file_path, is_full_month = run_downloader(config, logger)
+    # Returns LIST of (success, file_path, is_full_month)
+    results = run_downloader(config, logger)
 
-    if not success:
-        logger.error("❌ Download FAILED.")
+    # Check all tasks succeeded
+    all_success   = all(r[0] for r in results)
+    failed_tasks  = [i+1 for i, r in enumerate(results) if not r[0]]
+
+    if not all_success:
+        logger.error(
+            f"❌ Download FAILED for task(s): {failed_tasks}"
+        )
         sys.exit(1)
 
-    # Save file path to handoff file
-    # This file is uploaded as artifact and
-    # downloaded by email step
+    # Build handoff with ALL downloaded files
+    # Email step will process each file sequentially
+    file_paths = [r[1] for r in results]
+
     handoff = {
-        "file_path"     : file_path,
-        "is_full_month" : is_full_month,
+        "file_paths"    : file_paths,
+        "is_full_month" : True,
         "run_date"      : run_date.strftime("%Y-%m-%d %H:%M:%S"),
         "downloaded_by" : "download_master.py",
+        "task_count"    : len(results),
     }
 
     handoff_path = Path("/tmp/handoff.json")
     with open(handoff_path, "w") as f:
         json.dump(handoff, f, indent=2)
 
-    logger.info(f"✅ Download complete: {Path(file_path).name}")
+    for file_path in file_paths:
+        logger.info(f"✅ Downloaded: {Path(file_path).name}")
     logger.info(f"✅ Handoff saved: {handoff_path}")
+    logger.info(f"✅ Total files  : {len(file_paths)}")
     logger.info("=" * 70)
 
 
