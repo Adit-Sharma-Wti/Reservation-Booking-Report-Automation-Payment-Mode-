@@ -47,12 +47,17 @@ def main():
     download_dir = config["PATHS"]["downloads_source_folder"]
     Path(download_dir).mkdir(parents=True, exist_ok=True)
 
-    # Returns LIST of (success, file_path, is_full_month)
+    # Returns LIST of dicts:
+    # [{"success", "file_path", "is_full_month", "file_date"}, ...]
     results = run_downloader(config, logger)
 
-    # Check all tasks succeeded
-    all_success   = all(r[0] for r in results)
-    failed_tasks  = [i+1 for i, r in enumerate(results) if not r[0]]
+    # ── Validate results using dict keys (NOT tuple index) ──
+    all_success  = all(r["success"] for r in results)
+    failed_tasks = [
+        i + 1
+        for i, r in enumerate(results)
+        if not r["success"]
+    ]
 
     if not all_success:
         logger.error(
@@ -60,16 +65,15 @@ def main():
         )
         sys.exit(1)
 
-    # Build handoff with ALL downloaded files
-    # Email step will process each file sequentially
+    # ── Build handoff with file_path + file_date per file ──
     files = [
         {
-            "file_path" : r["file_path"],
-            "file_date" : r["file_date"],
+            "file_path": r["file_path"],
+            "file_date": r["file_date"],
         }
         for r in results
     ]
-    
+
     handoff = {
         "files"         : files,
         "is_full_month" : True,
@@ -77,24 +81,20 @@ def main():
         "downloaded_by" : "download_master.py",
         "task_count"    : len(results),
     }
-    
-    # Update logger lines
-    for item in files:
-        logger.info(
-            f"✅ Downloaded : {Path(item['file_path']).name}"
-            f" (file_date: {item['file_date']})"
-        )
-    logger.info(f"✅ Handoff saved : {handoff_path}")
-    logger.info(f"✅ Total files   : {len(files)}")
 
     handoff_path = Path("/tmp/handoff.json")
     with open(handoff_path, "w") as f:
         json.dump(handoff, f, indent=2)
 
-    for file_path in file_paths:
-        logger.info(f"✅ Downloaded: {Path(file_path).name}")
-    logger.info(f"✅ Handoff saved: {handoff_path}")
-    logger.info(f"✅ Total files  : {len(file_paths)}")
+    # ── Log each downloaded file ───────────────────────────
+    for item in files:
+        logger.info(
+            f"✅ Downloaded : {Path(item['file_path']).name}"
+            f" | file_date: {item['file_date']}"
+        )
+
+    logger.info(f"✅ Handoff saved : {handoff_path}")
+    logger.info(f"✅ Total files   : {len(files)}")
     logger.info("=" * 70)
 
 
