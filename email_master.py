@@ -55,67 +55,86 @@ def main():
     with open(handoff_path, "r") as f:
         handoff = json.load(f)
 
-    # Support both old (file_path) and new (file_paths) format
+    # ── Support all handoff formats ────────────────────────
     if "files" in handoff:
-    # New format: list of {file_path, file_date}
-    files = handoff["files"]
-elif "file_paths" in handoff:
-    # Old format: just list of paths, no file_date
-    files = [
-        {"file_path": fp, "file_date": None}
-        for fp in handoff["file_paths"]
-    ]
-elif "file_path" in handoff:
-    # Oldest format: single path
-    files = [
-        {"file_path": handoff["file_path"], "file_date": None}
-    ]
-else:
-    logger.error("❌ No file path found in handoff.json")
-    sys.exit(1)
+        # New format: list of {file_path, file_date}
+        files = handoff["files"]
 
-logger.info(f"📂 Files to process : {len(files)}")
+    elif "file_paths" in handoff:
+        # Old format: list of paths only, no file_date
+        files = [
+            {
+                "file_path": fp,
+                "file_date": None,
+            }
+            for fp in handoff["file_paths"]
+        ]
 
-for idx, item in enumerate(files, start=1):
-    file_path  = item["file_path"]
-    file_date_str = item.get("file_date", None)
+    elif "file_path" in handoff:
+        # Oldest format: single path only
+        files = [
+            {
+                "file_path": handoff["file_path"],
+                "file_date": None,
+            }
+        ]
 
-    # Parse file_date string back to datetime
-    if file_date_str:
-        file_date = datetime.strptime(
-            file_date_str, "%Y-%m-%d"
-        )
     else:
-        file_date = None
-
-    logger.info("=" * 70)
-    logger.info(
-        f"  Processing file {idx}/{len(files)}: "
-        f"{Path(file_path).name}"
-    )
-    if file_date:
-        logger.info(
-            f"  File month : "
-            f"{file_date.strftime('%B %Y')}"
-        )
-    logger.info("=" * 70)
-
-    # Pass file_date so processor uses correct
-    # month folder and store path
-    success = run_processor(
-        config, logger, file_path, file_date
-    )
-
-    if not success:
         logger.error(
-            f"❌ Processing FAILED for: "
-            f"{Path(file_path).name}"
+            "❌ No file path found in handoff.json"
         )
         sys.exit(1)
 
+    logger.info(f"📂 Files to process : {len(files)}")
     logger.info(
-        f"✅ File {idx}/{len(files)} complete."
+        f"📅 Downloaded at    : {handoff['run_date']}"
     )
+
+    output_dir = config["PATHS"]["root_output_folder"]
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    # ── Process each file sequentially ────────────────────
+    # On 1st of month: prev month file first, then current
+    for idx, item in enumerate(files, start=1):
+        file_path     = item["file_path"]
+        file_date_str = item.get("file_date", None)
+
+        # Parse file_date string back to datetime
+        if file_date_str:
+            file_date = datetime.strptime(
+                file_date_str, "%Y-%m-%d"
+            )
+        else:
+            file_date = None
+
+        logger.info("=" * 70)
+        logger.info(
+            f"  Processing file {idx}/{len(files)}: "
+            f"{Path(file_path).name}"
+        )
+        if file_date:
+            logger.info(
+                f"  File month  : "
+                f"{file_date.strftime('%B %Y')}"
+            )
+        logger.info("=" * 70)
+
+        # Pass file_date so processor uses correct
+        # month folder, store path and report label
+        success = run_processor(
+            config, logger, file_path, file_date
+        )
+
+        if not success:
+            logger.error(
+                f"❌ Processing FAILED for: "
+                f"{Path(file_path).name}"
+            )
+            sys.exit(1)
+
+        logger.info(
+            f"✅ File {idx}/{len(files)} complete."
+        )
 
     logger.info("=" * 70)
     logger.info("✅ All files processed and emails sent.")
