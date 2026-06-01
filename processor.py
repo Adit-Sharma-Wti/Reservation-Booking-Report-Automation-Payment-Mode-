@@ -355,15 +355,41 @@ def clean_data(
 # REPORT DATE LABEL
 # ============================================================
 
-def get_report_label(run_date: datetime, logger: logging.Logger) -> str:
-    if run_date.day == 1:
-        label = run_date.strftime("%b-%Y")
+def get_report_label(
+    file_date: datetime,
+    run_date: datetime,
+    logger: logging.Logger
+) -> str:
+    """
+    file_date = date derived from the FILE being processed
+    run_date  = actual today's date
+
+    Label is always based on file_date (the data month),
+    not today's date.
+
+    If file_date is for a previous month (e.g. May file
+    being processed on 1-June), use month label only.
+    If file_date is current month and not 1st, use full date.
+    """
+    is_previous_month = (
+        file_date.year != run_date.year or
+        file_date.month != run_date.month
+    )
+
+    if is_previous_month:
+        # Processing previous month file → use month label
+        label = file_date.strftime("%b-%Y")
+    elif run_date.day == 1:
+        # First day of current month → use month label
+        label = file_date.strftime("%b-%Y")
     else:
+        # Normal daily run → use full date
         label = run_date.strftime("%d-%b-%Y")
-    logger.info(f"[PROCESSOR] Report label: {label}")
+
+    logger.info(f"[PROCESSOR] Report label : {label}")
+    logger.info(f"[PROCESSOR] File month   : {file_date.strftime('%b-%Y')}")
     return label
-
-
+    
 # ============================================================
 # LOAD PROCESSED STORE
 # ============================================================
@@ -978,6 +1004,7 @@ def run_processor(
     config: configparser.ConfigParser,
     logger: logging.Logger,
     downloaded_file_path: str,
+    file_date: datetime = None,       # ← NEW PARAMETER
 ) -> bool:
     try:
         run_date   = datetime.today()
@@ -989,24 +1016,47 @@ def run_processor(
             )
             return False
 
-        folders      = setup_folder_structure(run_date, config)
-        store_folder = Path(config["PATHS"]["root_output_folder"].strip())
-        store_path   = store_folder / get_month_folder_name(run_date) / config["PATHS"]["store_file_name"]
-        report_label = get_report_label(run_date, logger)
+        # If file_date not provided, default to today
+        # file_date tells us WHICH MONTH the file belongs to
+        if file_date is None:
+            file_date = run_date
+
+        logger.info(
+            f"[PROCESSOR] Run date  : "
+            f"{run_date.strftime('%d-%b-%Y')}"
+        )
+        logger.info(
+            f"[PROCESSOR] File date : "
+            f"{file_date.strftime('%d-%b-%Y')}"
+        )
+
+        # Use file_date for folder and store
+        # NOT run_date
+        folders      = setup_folder_structure(file_date, config)
+        store_folder = Path(
+            config["PATHS"]["root_output_folder"].strip()
+        )
+        store_path   = (
+            store_folder
+            / get_month_folder_name(file_date)
+            / config["PATHS"]["store_file_name"]
+        )
+        report_label = get_report_label(
+            file_date, run_date, logger
+        )
 
         manage_download_folders(input_file, folders, logger)
 
         dump_df = load_data(input_file, logger)
-        
-        df = clean_data(dump_df, logger)
+        df      = clean_data(dump_df, logger)
 
         processed_nos = load_store(store_path, logger)
-
-        df_filtered = apply_filters(df, processed_nos, logger)
+        df_filtered   = apply_filters(df, processed_nos, logger)
 
         if df_filtered.empty:
             logger.warning(
-                "[PROCESSOR] No new bookings — writing empty files."
+                "[PROCESSOR] No new bookings — "
+                "writing empty files."
             )
             linkedin_df = pd.DataFrame(columns=linkedin_columns)
             nonbtc_df   = pd.DataFrame(columns=common_columns)
@@ -1016,7 +1066,6 @@ def run_processor(
                 df_filtered, logger
             )
 
-        # Write 3 separate output files
         linkedin_file, btc_file, nonbtc_file = write_output_files(
             linkedin_df, nonbtc_df, btc_df,
             folders, report_label, logger
@@ -1027,7 +1076,6 @@ def run_processor(
                 df_filtered, store_path, dump_df, logger
             )
 
-        # Send 3 separate emails
         send_report_emails(
             linkedin_file, btc_file, nonbtc_file,
             linkedin_df, nonbtc_df, btc_df,
@@ -1037,5 +1085,7 @@ def run_processor(
         return True
 
     except Exception as e:
-        logger.exception(f"[PROCESSOR] ❌ Unexpected error: {e}")
+        logger.exception(
+            f"[PROCESSOR] ❌ Unexpected error: {e}"
+        )
         return False
