@@ -56,44 +56,66 @@ def main():
         handoff = json.load(f)
 
     # Support both old (file_path) and new (file_paths) format
-    if "file_paths" in handoff:
-        file_paths = handoff["file_paths"]
-    elif "file_path" in handoff:
-        file_paths = [handoff["file_path"]]
-    else:
-        logger.error("❌ No file path found in handoff.json")
-        sys.exit(1)
+    if "files" in handoff:
+    # New format: list of {file_path, file_date}
+    files = handoff["files"]
+elif "file_paths" in handoff:
+    # Old format: just list of paths, no file_date
+    files = [
+        {"file_path": fp, "file_date": None}
+        for fp in handoff["file_paths"]
+    ]
+elif "file_path" in handoff:
+    # Oldest format: single path
+    files = [
+        {"file_path": handoff["file_path"], "file_date": None}
+    ]
+else:
+    logger.error("❌ No file path found in handoff.json")
+    sys.exit(1)
 
-    logger.info(f"📂 Files to process : {len(file_paths)}")
+logger.info(f"📂 Files to process : {len(files)}")
+
+for idx, item in enumerate(files, start=1):
+    file_path  = item["file_path"]
+    file_date_str = item.get("file_date", None)
+
+    # Parse file_date string back to datetime
+    if file_date_str:
+        file_date = datetime.strptime(
+            file_date_str, "%Y-%m-%d"
+        )
+    else:
+        file_date = None
+
+    logger.info("=" * 70)
     logger.info(
-        f"📅 Downloaded at    : {handoff['run_date']}"
+        f"  Processing file {idx}/{len(files)}: "
+        f"{Path(file_path).name}"
+    )
+    if file_date:
+        logger.info(
+            f"  File month : "
+            f"{file_date.strftime('%B %Y')}"
+        )
+    logger.info("=" * 70)
+
+    # Pass file_date so processor uses correct
+    # month folder and store path
+    success = run_processor(
+        config, logger, file_path, file_date
     )
 
-    output_dir = config["PATHS"]["root_output_folder"]
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-    # Process each file sequentially
-    # On 1st of month: prev month file first, then current
-    for idx, file_path in enumerate(file_paths, start=1):
-        logger.info("=" * 70)
-        logger.info(
-            f"  Processing file {idx}/{len(file_paths)}: "
+    if not success:
+        logger.error(
+            f"❌ Processing FAILED for: "
             f"{Path(file_path).name}"
         )
-        logger.info("=" * 70)
+        sys.exit(1)
 
-        success = run_processor(config, logger, file_path)
-
-        if not success:
-            logger.error(
-                f"❌ Processing FAILED for: "
-                f"{Path(file_path).name}"
-            )
-            sys.exit(1)
-
-        logger.info(
-            f"✅ File {idx}/{len(file_paths)} complete."
-        )
+    logger.info(
+        f"✅ File {idx}/{len(files)} complete."
+    )
 
     logger.info("=" * 70)
     logger.info("✅ All files processed and emails sent.")
