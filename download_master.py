@@ -62,15 +62,30 @@ def main():
 
     # Build handoff with ALL downloaded files
     # Email step will process each file sequentially
-    file_paths = [r[1] for r in results]
-
+    files = [
+        {
+            "file_path" : r["file_path"],
+            "file_date" : r["file_date"],
+        }
+        for r in results
+    ]
+    
     handoff = {
-        "file_paths"    : file_paths,
+        "files"         : files,
         "is_full_month" : True,
         "run_date"      : run_date.strftime("%Y-%m-%d %H:%M:%S"),
         "downloaded_by" : "download_master.py",
         "task_count"    : len(results),
     }
+    
+    # Update logger lines
+    for item in files:
+        logger.info(
+            f"✅ Downloaded : {Path(item['file_path']).name}"
+            f" (file_date: {item['file_date']})"
+        )
+    logger.info(f"✅ Handoff saved : {handoff_path}")
+    logger.info(f"✅ Total files   : {len(files)}")
 
     handoff_path = Path("/tmp/handoff.json")
     with open(handoff_path, "w") as f:
