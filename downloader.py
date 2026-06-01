@@ -230,9 +230,12 @@ def run_downloader(
                     f"[DOWNLOADER] ✅ Downloaded: {task['filename']}"
                 )
 
-                results.append(
-                    (True, file_path, task["is_full_month"])
-                )
+                results.append({
+                    "success"      : True,
+                    "file_path"    : file_path,
+                    "is_full_month": task["is_full_month"],
+                    "file_date"    : task["from_date"].strftime("%Y-%m-%d"),
+                })
 
             # LOGOUT ONCE
             logger.info("[DOWNLOADER] Logging out...")
@@ -248,8 +251,13 @@ def run_downloader(
         logger.exception(f"[DOWNLOADER] ❌ Download failed: {e}")
         # Return failure for remaining tasks
         tasks_done = len(results)
-        for _ in tasks[tasks_done:]:
-            results.append((False, "", True))
+        for t in tasks[tasks_done:]:
+            results.append({
+                "success"      : False,
+                "file_path"    : "",
+                "is_full_month": True,
+                "file_date"    : t["from_date"].strftime("%Y-%m-%d"),
+            })
 
     return results
 
