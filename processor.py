@@ -600,7 +600,6 @@ def build_html_body(
     report_label: str,
     attachment_name: str,
 ) -> str:
-    generated_on = datetime.today().strftime("%d-%b-%Y %H:%M")
 
     if report_type == "LinkedIn":
         report_title = f"LinkedIn Booking Report: {report_label}"
@@ -681,15 +680,6 @@ def build_html_body(
                                                        font-weight:bold;
                                                        padding-bottom:5px;">
                                                 {report_title}
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td style="font-size:12px;
-                                                       color:#666666;">
-                                                Generated on:
-                                                <strong>
-                                                    {generated_on}
-                                                </strong>
                                             </td>
                                         </tr>
                                     </table>
