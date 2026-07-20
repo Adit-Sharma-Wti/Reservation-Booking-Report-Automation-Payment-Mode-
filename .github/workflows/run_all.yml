@@ -9,7 +9,7 @@ name: 🚀 Run Full Report (Download + Email)
 on:
   workflow_dispatch:    # Manual trigger ONLY
     inputs:
-      trigger by :
+      triggered_by:
         description: 'Who triggered this run'
         required: false
         default: 'manual'
