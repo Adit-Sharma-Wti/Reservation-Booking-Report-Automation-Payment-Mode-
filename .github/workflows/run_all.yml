@@ -9,10 +9,10 @@ name: 🚀 Run Full Report (Download + Email)
 on:
   workflow_dispatch:    # Manual trigger ONLY
     inputs:
-      reason:
-        description: 'Reason for manual run (optional)'
+      trigger by :
+        description: 'Who triggered this run'
         required: false
-        default: 'Daily manual run'
+        default: 'manual'
 
 jobs:
 
