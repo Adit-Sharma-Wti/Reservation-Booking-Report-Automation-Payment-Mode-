@@ -6,11 +6,13 @@
 import sys
 import logging
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 
 from config_loader import load_config
 from downloader import run_downloader
+from google_sheets_updater import update_google_sheet
 
 
 def setup_logger() -> logging.Logger:
@@ -33,13 +35,33 @@ def setup_logger() -> logging.Logger:
     return logger
 
 
+def is_current_month_file(file_date_str: str) -> bool:
+    """
+    Returns True if the file_date matches today's month and year.
+    Used to identify current month file on 1st of month
+    when 2 files are downloaded.
+    """
+    if not file_date_str:
+        return True  # Default: treat as current month
+
+    today     = datetime.today()
+    file_date = datetime.strptime(file_date_str, "%Y-%m-%d")
+
+    return (
+        file_date.year  == today.year and
+        file_date.month == today.month
+    )
+
+
 def main():
-    logger = setup_logger()
+    logger   = setup_logger()
     run_date = datetime.today()
 
     logger.info("=" * 70)
     logger.info("  STEP 1 — DOWNLOAD BOOKING DATA")
-    logger.info(f"  Run Date : {run_date.strftime('%d-%b-%Y %H:%M:%S')}")
+    logger.info(
+        f"  Run Date : {run_date.strftime('%d-%b-%Y %H:%M:%S')}"
+    )
     logger.info("=" * 70)
 
     config = load_config("config.ini")
@@ -47,11 +69,10 @@ def main():
     download_dir = config["PATHS"]["downloads_source_folder"]
     Path(download_dir).mkdir(parents=True, exist_ok=True)
 
-    # Returns LIST of dicts:
-    # [{"success", "file_path", "is_full_month", "file_date"}, ...]
+    # ── Run Downloader ─────────────────────────────────────
     results = run_downloader(config, logger)
 
-    # ── Validate results using dict keys (NOT tuple index) ──
+    # ── Validate Results ───────────────────────────────────
     all_success  = all(r["success"] for r in results)
     failed_tasks = [
         i + 1
@@ -65,7 +86,7 @@ def main():
         )
         sys.exit(1)
 
-    # ── Build handoff with file_path + file_date per file ──
+    # ── Build Handoff ──────────────────────────────────────
     files = [
         {
             "file_path": r["file_path"],
@@ -86,7 +107,7 @@ def main():
     with open(handoff_path, "w") as f:
         json.dump(handoff, f, indent=2)
 
-    # ── Log each downloaded file ───────────────────────────
+    # ── Log Each Downloaded File ───────────────────────────
     for item in files:
         logger.info(
             f"✅ Downloaded : {Path(item['file_path']).name}"
@@ -95,6 +116,71 @@ def main():
 
     logger.info(f"✅ Handoff saved : {handoff_path}")
     logger.info(f"✅ Total files   : {len(files)}")
+
+    # ── Google Sheet Update ────────────────────────────────
+    logger.info("=" * 70)
+    logger.info("  GOOGLE SHEET UPDATE")
+    logger.info("=" * 70)
+
+    # Get secrets from environment
+    service_account_json = os.environ.get(
+        "GOOGLE_SERVICE_ACCOUNT_JSON", ""
+    ).strip()
+    sheet_id = os.environ.get(
+        "GOOGLE_SHEET_ID", ""
+    ).strip()
+
+    if not service_account_json:
+        logger.error(
+            "[SHEETS] ❌ GOOGLE_SERVICE_ACCOUNT_JSON secret "
+            "is missing — skipping sheet update."
+        )
+    elif not sheet_id:
+        logger.error(
+            "[SHEETS] ❌ GOOGLE_SHEET_ID secret "
+            "is missing — skipping sheet update."
+        )
+    else:
+        # ── Find current month file ────────────────────────
+        current_month_file = None
+
+        for item in files:
+            if is_current_month_file(item["file_date"]):
+                current_month_file = item["file_path"]
+                logger.info(
+                    f"[SHEETS] Current month file identified: "
+                    f"{Path(current_month_file).name}"
+                )
+                break
+
+        if not current_month_file:
+            logger.warning(
+                "[SHEETS] ⚠️  No current month file found "
+                "— skipping sheet update."
+            )
+        else:
+            # ── Update Sheet ───────────────────────────────
+            success = update_google_sheet(
+                file_path            = current_month_file,
+                service_account_json = service_account_json,
+                sheet_id             = sheet_id,
+                sheet_name           = "BOOKING",
+                logger               = logger,
+            )
+
+            if success:
+                logger.info(
+                    "✅ Google Sheet updated successfully!"
+                )
+            else:
+                # Option B — log error but continue
+                logger.error(
+                    "❌ Google Sheet update FAILED. "
+                    "Email job will still proceed."
+                )
+
+    logger.info("=" * 70)
+    logger.info("✅ Download step complete.")
     logger.info("=" * 70)
 
 
