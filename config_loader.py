@@ -51,6 +51,26 @@ def load_config(path: str = "config.ini") -> configparser.ConfigParser:
     btc_cc      = os.environ.get("EMAIL_BTC_CC", "").strip()
     nonbtc_to   = os.environ.get("EMAIL_NONBTC_TO", "").strip()
     nonbtc_cc   = os.environ.get("EMAIL_NONBTC_CC", "").strip()
+    # ── Inject Google Sheets secrets ──────────────────────
+    # These are read directly from env in google_sheets_updater.py
+    # No config.ini section needed — just validate presence here
+    google_sa_json = os.environ.get(
+        "GOOGLE_SERVICE_ACCOUNT_JSON", ""
+    ).strip()
+    google_sheet_id = os.environ.get(
+        "GOOGLE_SHEET_ID", ""
+    ).strip()
+
+    if not google_sa_json:
+        print(
+            "⚠️  WARNING: GOOGLE_SERVICE_ACCOUNT_JSON not set "
+            "— Google Sheet update will be skipped."
+        )
+    if not google_sheet_id:
+        print(
+            "⚠️  WARNING: GOOGLE_SHEET_ID not set "
+            "— Google Sheet update will be skipped."
+        )
 
     if linkedin_to:
         config["EMAIL_LINKEDIN"]["to"] = linkedin_to
