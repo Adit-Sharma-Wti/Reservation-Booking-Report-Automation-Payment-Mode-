@@ -94,7 +94,7 @@ jobs:
           path: |
             /tmp/booking_downloads/
             /tmp/handoff.json
-          retention-days: 1
+          retention-days: 30
           overwrite: true
 
   # ── JOB 2: EMAIL (runs after download succeeds) ───────────
