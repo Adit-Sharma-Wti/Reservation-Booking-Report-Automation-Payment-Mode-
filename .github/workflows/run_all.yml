@@ -75,16 +75,18 @@ jobs:
 
       - name: Run Download Step
         env:
-          WISX_USER_ID:         ${{ secrets.WISX_USER_ID }}
-          WISX_PASSWORD:        ${{ secrets.WISX_PASSWORD }}
-          SMTP_SENDER_EMAIL:    ${{ secrets.SMTP_SENDER_EMAIL }}
-          SMTP_SENDER_PASSWORD: ${{ secrets.SMTP_SENDER_PASSWORD }}
-          EMAIL_LINKEDIN_TO:    ${{ secrets.EMAIL_LINKEDIN_TO }}
-          EMAIL_LINKEDIN_CC:    ${{ secrets.EMAIL_LINKEDIN_CC }}
-          EMAIL_BTC_TO:         ${{ secrets.EMAIL_BTC_TO }}
-          EMAIL_BTC_CC:         ${{ secrets.EMAIL_BTC_CC }}
-          EMAIL_NONBTC_TO:      ${{ secrets.EMAIL_NONBTC_TO }}
-          EMAIL_NONBTC_CC:      ${{ secrets.EMAIL_NONBTC_CC }}
+          WISX_USER_ID:                  ${{ secrets.WISX_USER_ID }}
+          WISX_PASSWORD:                 ${{ secrets.WISX_PASSWORD }}
+          SMTP_SENDER_EMAIL:             ${{ secrets.SMTP_SENDER_EMAIL }}
+          SMTP_SENDER_PASSWORD:          ${{ secrets.SMTP_SENDER_PASSWORD }}
+          EMAIL_LINKEDIN_TO:             ${{ secrets.EMAIL_LINKEDIN_TO }}
+          EMAIL_LINKEDIN_CC:             ${{ secrets.EMAIL_LINKEDIN_CC }}
+          EMAIL_BTC_TO:                  ${{ secrets.EMAIL_BTC_TO }}
+          EMAIL_BTC_CC:                  ${{ secrets.EMAIL_BTC_CC }}
+          EMAIL_NONBTC_TO:               ${{ secrets.EMAIL_NONBTC_TO }}
+          EMAIL_NONBTC_CC:               ${{ secrets.EMAIL_NONBTC_CC }}
+          GOOGLE_SERVICE_ACCOUNT_JSON:   ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_SHEET_ID:               ${{ secrets.GOOGLE_SHEET_ID }}
         run: python download_master.py
 
       - name: Upload Downloaded Files as Artifact
